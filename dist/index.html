@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <script src="Vue.js"></script>
+</head>
+<body>
+  <div id="app">
+    <div>
+      {{name}} -- {{age}}
+    </div>
+    <span>{{info.content}}</span>
+  </div>
+  <script>
+    console.log(Vue)
+    // 响应式变化，数据变了我们可以监控到数据变化
+    // 数据取值和更改值我们要监控到
+    const vm = new Vue({
+      data() {  // 代理数据
+        return {
+          name:"hdl",
+          age: 20,
+          info: {
+            num: 30,
+            content: "我是一个人"
+          },
+          hobby:['eat', 'drink', {a: 20}]
+        }
+      },
+      template:`<div>hello</div>`,
+      el: '#app',
+    })
+    vm.sex = 'nan'
+    vm.info = {
+      num: 20
+    }
+    console.log(vm.hobby)
+    // 如果是数组再做循环劫持，性能太差
+
+    // 1.模板引擎，性能太差，需要正则匹配
+    // 2.虚拟DOM，数据变化后比较虚拟DOM的差异，最后更新需要更新的地方
+    // 3.核心就是将我们的模板变成js语法，通过js语法生成虚拟dom
+    // 4.我们需要先变成语法树再重新组装代码成为新的语法，将templent语法转换为render()函数
+  </script>
+</body>
+</html>
