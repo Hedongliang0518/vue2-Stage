@@ -9,7 +9,7 @@
 </head>
 <body>
   <div id="app">
-    <div>
+    <div style="color:red">
       {{name}} -- {{age}}
     </div>
     <span>{{info.content}}</span>
@@ -30,7 +30,7 @@
           hobby:['eat', 'drink', {a: 20}]
         }
       },
-      template:`<div>hello</div>`,
+      // template:`<div>hello</div>`,
       el: '#app',
     })
     vm.sex = 'nan'
