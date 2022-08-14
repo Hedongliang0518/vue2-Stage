@@ -18,6 +18,38 @@ export const compileToFunction = function(template) {
 }
 
 function parsHTML(html) {
+  const ELEMENT_TYPE = 1;
+  const TEXT_TYPE = 3;
+  const stack = []; // 用于存放元素的
+  let currentParent; // 指向栈中最后一个
+  let root;
+  // 最终转化为一棵抽象语法树
+  // 栈中的最后一个元素就是当前匹配标签的父级
+  function createASTElement(tag, attrs) {
+    return{
+      tag,
+      type:ELEMENT_TYPE,
+      children: [],
+      attrs,
+      parent: null,
+    }
+  }
+
+  function start(tag, attrs) {
+    let node = createASTElement(tag, attrs); // 创建一个ast节点
+    if (!root) {   // 看一下是否是空树
+      root = node
+    }
+    stack.push(node);
+    currentParent = node;
+    console.log("开始标签", tag, attrs);
+  }
+  function chars(text) {
+    console.log("文本", text);
+  }
+  function end(tag) {
+    console.log("结束标签", tag);
+  }
   function addvance(n) {
     html = html.substring(n)
   }
@@ -45,18 +77,19 @@ function parsHTML(html) {
     return false;
   };
   while(html) {
-    debugger
     // 如果textEnd为0，则说明是开始或结束标签，如果大于0，则说明就是文本的结束位置
     let textEnd = html.indexOf('<');  // 如果indexOf中的索引是0，则说明是个标签
     if(textEnd == 0) {
       // 处理开始标签
       const startTagMatch = parsStartTag()
       if(startTagMatch) { // 解析开始标签
+        start(startTagMatch.tagName, startTagMatch.attrs)
         continue;
       }
       // 处理结束标签
       let endTagMatch = html.match(endTag);
       if(endTagMatch) {
+        end(endTagMatch.tagName)
         addvance(endTagMatch[0].length);
         continue;
       }
@@ -65,6 +98,7 @@ function parsHTML(html) {
     if(textEnd > 0) {
       let text = html.substring(0, textEnd)
       if(text) {
+        chars(text)
         addvance(text.length)
       }
     }
