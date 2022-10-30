@@ -1,15 +1,20 @@
 
 import { initState } from './state'
 import { compileToFunction } from './compiler/index'
+import { callHook, mountComponent } from './lifecycle';
+import { mergeOptions } from "./utils"
+
 export function initMixin(Vue) {  // 给Vue增加init方法
   Vue.prototype._init = function(options) {
     // vue vm.$options  就是获取用户配置   $表示vue自己的，所有以$开头的都认为是自身属性
     const vm = this;
-    vm.$options = options;  // 将用户的选项挂载到实例上
+    // 我们定义的全局指令和过滤器都会挂载到实例上
+    vm.$options = mergeOptions(this.constructor.options, options);  // 将用户的选项与全局的合并挂载到实例上
 
+    callHook(vm, 'beforeCreate')
     // 初始化状态
     initState(vm)
-
+    callHook(vm, 'created')
     if(options.el) {
       vm.$mount(options.el)
     }
@@ -28,12 +33,13 @@ export function initMixin(Vue) {  // 给Vue增加init方法
         }
       }
       // 获取到模板后，对模板进行编译
-      if(template) {
+      if(template && el) {
         const render = compileToFunction(template)
         ops.render = render;
       }
     }
 
+    mountComponent(vm, el)
     ops.render;
   }
 }

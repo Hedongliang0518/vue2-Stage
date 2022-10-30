@@ -1,4 +1,5 @@
 import { newArrayProto } from './array'
+import Dep from "./dep"
 class Observer {
   constructor(data) {
     // 将Observer实例赋到data自定义属性上。在劫持数组方法时拿到observeArray进行观测;也给数据加了一个标识,如果数据有__ob__,则说明改数据被劫持过了。
@@ -33,14 +34,21 @@ class Observer {
 // 对数据做响应式处理  闭包
 export function defineReactive(target, key, value) {
   observe(value) // 递归对所有对象都进行属性劫持
+  let dep = new Dep(); // 给每个属性添加dep，做依赖收集
   Object.defineProperty(target,key, {
     get() {   // 用户取值走get方法
+      // 页面渲染的时候会调用render函数，进行取值，依赖收集，没渲染的则不触发getter
+      if(Dep.target) {
+        dep.depend(); // 让这个属性的收集器记住当前的watcher
+      }
       return value;
     },
     set(newValue) {  // 用户设置值走set方法
       if(newValue === value) return;
       observe(newValue) // 递归对所有对象都进行属性劫持
       value = newValue;
+
+      dep.notifi(); // 通知更新
     }
   })
 }
