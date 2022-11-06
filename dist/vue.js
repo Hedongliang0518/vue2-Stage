@@ -53,6 +53,40 @@
         };
     }
 
+    let id$1 = 0;
+    class Dep {
+        constructor() {
+            this.id = id$1++; // 属性的dep要收集watcher
+            this.subs = []; // 存放当前属性对应的watcher
+        }
+
+        depend() {
+            // 这里不希望放置重复的watcher  dep -> watcher
+            // watcher记录dep
+            Dep.target.addDep(this); // 让watcher记住dept
+        }
+
+        addSub(watcher) {
+            this.subs.push(watcher);
+        }
+
+        notifi() {
+            this.subs.forEach(watcher => watcher.update()); // 通知watcher要更新
+        }
+    }
+    Dep.target = null;
+
+    let stark = [];
+    function pushTarget(watcher) {
+        stark.push(watcher);
+        Dep.target = watcher;
+    }
+
+    function popTarget(watcher) {
+        stark.pop();
+        Dep.target = stark[stark.length - 1];
+    }
+
     // 重写数组中部分方法
 
     // 获取数组的原型
@@ -89,35 +123,15 @@
             // 观测数组新增的每一项
             ob.observeArray(inserted);
           }
+          ob.dep.notifi();
         return result;
       };
     });
 
-    let id$1 = 0;
-    class Dep {
-        constructor() {
-            this.id = id$1++; // 属性的dep要收集watcher
-            this.subs = []; // 存放当前属性对应的watcher
-        }
-
-        depend() {
-            // 这里不希望放置重复的watcher  dep -> watcher
-            // watcher记录dep
-            Dep.target.addDep(this); // 让watcher记住dept
-        }
-
-        addSub(watcher) {
-            this.subs.push(watcher);
-        }
-
-        notifi() {
-            this.subs.forEach(watcher => watcher.update()); // 通知watcher要更新
-        }
-    }
-    Dep.target = null;
-
     class Observer {
       constructor(data) {
+        // 给每个对象都增加收集功能
+        this.dep = new Dep();
         // 将Observer实例赋到data自定义属性上。在劫持数组方法时拿到observeArray进行观测;也给数据加了一个标识,如果数据有__ob__,则说明改数据被劫持过了。
         data.__ob__ = this;
         // 给对象添加__ob__属性后，循环的时候会再次循环__ob__，形成死循环；将__ob__变成不可枚举
@@ -149,13 +163,19 @@
 
     // 对数据做响应式处理  闭包
     function defineReactive(target, key, value) {
-      observe(value); // 递归对所有对象都进行属性劫持
+      let childOb = observe(value); // 递归对所有对象都进行属性劫持 childOb.dep用来收集依赖
       let dep = new Dep(); // 给每个属性添加dep，做依赖收集
       Object.defineProperty(target,key, {
         get() {   // 用户取值走get方法
           // 页面渲染的时候会调用render函数，进行取值，依赖收集，没渲染的则不触发getter
           if(Dep.target) {
             dep.depend(); // 让这个属性的收集器记住当前的watcher
+            if(childOb) {
+              childOb.dep.depend(); // 让数组和对象本身也能实现依赖收集
+              if(Array.isArray(value)) {
+                dependArray(value);
+              }
+            }
           }
           return value;
         },
@@ -167,6 +187,17 @@
           dep.notifi(); // 通知更新
         }
       });
+    }
+
+
+    function dependArray(value) {
+      for(let i = 0; i < value.length; i++) {
+        let current = value[i];
+        current.__ob__ && current.__ob__.dep.depend();
+        if(Array.isArray(current)) {
+          dependArray(current);
+        }
+      }
     }
 
     function observe(data) {
@@ -182,10 +213,153 @@
       return new Observer(data);
     }
 
+    let id = 0;
+
+    // 每个属性有一个dep，属性就是被观察者，watcher就是观察者，属性变化了会通知观察者来更新
+    // 观察者模式
+
+    // 当我们创建渲染watcher的时候，我们会把当前的渲染watcher放到Dep.target上
+    // 调用_render方法
+    class Watcher {  // 不同组件有不同的watcher
+        constructor(vm, fn, options) {
+            this.id = id++;
+
+            this.renderWatcher = options;  // 是同一个渲染watcher
+
+            this.getter = fn; // 调用这个函数就会发生取值操作
+
+            this.deps = []; // watcher记录dep；如组件卸载，清除所有的响应式数据，实现计算属性和清理工作
+
+            this.depsId = new Set();
+            this.vm = vm;
+
+            this.lazy = options.lazy;
+            this.dirty = this.lazy;  // 缓存值（是否脏值）
+            
+            this.lazy ? undefined : this.get();
+        }
+
+        addDep(dep) {  // 一个组件对应多个属性，重复属性不用记录
+            let id = dep.id;
+            if(!this.depsId.has(id)){
+                this.deps.push(dep);
+                this.depsId.add(id);
+                dep.addSub(this);  // watcher已经记住了dep而且去重，此时让dep也记住watcher
+            }
+        }
+
+        evaluate() {
+           this.value = this.get(); // 获取到用户函数的返回值，并且标识为脏值
+           this.dirty = false;
+        }
+
+        get() {
+            // Dep.target = this; // 静态属性，将组件挂载到dep全局上
+            pushTarget(this); // 静态属性，将组件挂载到dep全局上
+            let value = this.getter.call(this.vm); // 触发_render方法，会去vm上取值，
+            // Dep.target = null; // 渲染完毕后置空，避免vm.xxx取值也进行依赖收集
+            popTarget(); // 渲染完毕后置空，避免vm.xxx取值也进行依赖收集
+            return value;
+        }
+
+        update() {
+            // 如果是计算属性 依赖的值发生变化，就标识计算属性是脏值
+            if(this.lazy) {
+                this.dirty = true;
+            }
+            queueWatcher(this); // 把当前的watcher暂存起来
+        }
+
+        depend() {
+            let i = this.deps.length;
+            while(i--) {
+                this.deps[i].depend(); // 让计算属性watcher收集渲染watcher
+            }
+        }
+        
+        run() {
+            console.log(("updata"));
+            this.get();
+        } 
+    }
+
+    let queue = [];
+    let has = {};
+    let pending = false; // 防抖
+    function queueWatcher(watcher) {
+        const id = watcher.id;
+        if(!has[id]) {
+            queue.push(watcher);
+            has[id] = true;
+            // 不管updata执行多少次，但是最终刷新操作只执行一次
+            if(!pending) {
+                nextTick(flushSchedulerQueue);
+                pending = true;
+
+            }
+        }
+    }
+    // 异步更新导致用户取值取到不是最新值
+    function flushSchedulerQueue() {
+        let flushQueue = queue.slice(0);
+        queue = [];
+        has = {};
+        pending = false;
+        flushQueue.forEach(q => q.run()); 
+    }
+
+    let callbacks = [];
+    let waiting = false;
+
+    function flushCallbacks() {
+        let cbs = callbacks.splice(0);
+        waiting = false;
+        callbacks = [];
+        cbs.forEach(cb => cb());
+    }
+
+    let timerFunc;
+    if(Promise) {
+        timerFunc = () => {
+            Promise.resolve().then(flushCallbacks);
+        };
+    } else if(MutationObserver) {
+        let observe = new MutationObserver(flushCallbacks); // 这里传入的回调是异步执行
+        let textNode = document.createTextNode(1);
+        observe.observe(textNode, {
+            characterData: true
+        });
+        timerFunc = () => {
+            textNode.textContent = 2;
+        };
+    } else if (setImmediate) {
+        timerFunc = () => {
+            setImmediate(flushCallbacks);
+        };
+    } else {
+        timerFunc = () => {
+            setTimeout(flushCallbacks);
+        };
+    }
+    // 异步批处理 使用队列(使用变量控制开异步)
+    // nextTick不是创建一个异步任务，而是将这个任务维护到了队列中
+    // 没有直接使用某个api，采用优雅降级的方式
+    // 先采用promise（IE不兼容），MutationObserver(微任务，H5的api)，setImmediate(ie专属)，setTimeout
+    function nextTick(cb) {
+        callbacks.push(cb); // 维护nextTick的calback方法
+        if(!waiting) {
+            timerFunc();
+        }
+        waiting = true;
+    }
+
     function initState(vm) {
       const opts = vm.$options;
       if(opts.data) {
         initData(vm);
+      }
+      if(opts.computed) {
+        initComputed(vm);
       }
     }
 
@@ -211,6 +385,45 @@
           vm[target][key] = newValue;
         }
       });
+    }
+
+    function initComputed(vm) {
+      const computed = vm.$options.computed;
+      const watchers = vm._computedWatchers = {};  // 将计算属性watcher保存到vm上
+      for(let key in computed) {
+        let userDef = computed[key];
+        // 监控计算属性get的变化
+        const fn = typeof userDef === "function" ? userDef : userDef.get;
+        // 将属性和watcher对应起来
+        watchers[key] = new Watcher(vm, fn, {lazy: true});
+        defineComputed(vm, key, userDef);
+      }
+    }
+
+    function defineComputed(target, key, userDef) {
+      typeof userDef === "function" ? userDef : userDef.get;
+      const setter = userDef.set || (()=>{});
+      Object.defineProperty(target, key, {
+        get: createComputedGetter(key),
+        set: setter
+      });
+    }
+
+
+    // 检测是否要执行getter
+    // 计算属性不会自己收集依赖，让自己依赖的属性去收集waatcher
+    function createComputedGetter(key) {
+      return function() {
+        const watcher = this._computedWatchers[key];
+        if(watcher.dirty) {
+          watcher.evaluate(); // 求值后，dirty变为false，走缓存
+        }
+        if(Dep.target) {
+          // 如果dep。target存在，说明计算属性出栈后还有渲染watcher  应该让计算属性watcher里面的属性也去收集上层的watcher
+          watcher.depend();
+        }
+        return watcher.value;
+      }
     }
 
     // 模板编译
@@ -400,123 +613,6 @@
       return render;
     };
 
-    let id = 0;
-
-    // 每个属性有一个dep，属性就是被观察者，watcher就是观察者，属性变化了会通知观察者来更新
-    // 观察者模式
-
-    // 当我们创建渲染watcher的时候，我们会把当前的渲染watcher放到Dep.target上
-    // 调用_render方法
-    class Watcher {  // 不同组件有不同的watcher
-        constructor(vm, fn) {
-            this.id = id++;
-
-            this.getter = fn; // 调用这个函数就会发生取值操作
-
-            this.deps = []; // watcher记录dep；如组件卸载，清除所有的响应式数据，实现计算属性和清理工作
-
-            this.depsId = new Set();
-            
-            this.get();
-        }
-
-        addDep(dep) {  // 一个组件对应多个属性，重复属性不用记录
-            let id = dep.id;
-            if(!this.depsId.has(id)){
-                this.deps.push(dep);
-                this.depsId.add(id);
-                dep.addSub(this);  // watcher已经记住了dep而且去重，此时让dep也记住watcher
-            }
-        }
-
-        get() {
-            Dep.target = this; // 静态属性，将组件挂载到dep全局上
-            this.getter(); // 触发_render方法，会去vm上取值，
-            Dep.target = null; // 渲染完毕后置空，避免vm.xxx取值也进行依赖收集
-        }
-
-        update() {
-            queueWatcher(this); // 把当前的watcher暂存起来
-        }
-        
-        run() {
-            console.log(("updata"));
-            this.get();
-        }
-
-        
-    }
-
-    let queue = [];
-    let has = {};
-    let pending = false; // 防抖
-    function queueWatcher(watcher) {
-        const id = watcher.id;
-        if(!has[id]) {
-            queue.push(watcher);
-            has[id] = true;
-            // 不管updata执行多少次，但是最终刷新操作只执行一次
-            if(!pending) {
-                nextTick(flushSchedulerQueue);
-                pending = true;
-
-            }
-        }
-    }
-    // 异步更新导致用户取值取到不是最新值
-    function flushSchedulerQueue() {
-        let flushQueue = queue.slice(0);
-        queue = [];
-        has = {};
-        pending = false;
-        flushQueue.forEach(q => q.run()); 
-    }
-
-    let callbacks = [];
-    let waiting = false;
-
-    function flushCallbacks() {
-        let cbs = callbacks.splice(0);
-        waiting = false;
-        callbacks = [];
-        cbs.forEach(cb => cb());
-    }
-
-    let timerFunc;
-    if(Promise) {
-        timerFunc = () => {
-            Promise.resolve().then(flushCallbacks);
-        };
-    } else if(MutationObserver) {
-        let observe = new MutationObserver(flushCallbacks); // 这里传入的回调是异步执行
-        let textNode = document.createTextNode(1);
-        observe.observe(textNode, {
-            characterData: true
-        });
-        timerFunc = () => {
-            textNode.textContent = 2;
-        };
-    } else if (setImmediate) {
-        timerFunc = () => {
-            setImmediate(flushCallbacks);
-        };
-    } else {
-        timerFunc = () => {
-            setTimeout(flushCallbacks);
-        };
-    }
-    // 异步批处理 使用队列(使用变量控制开异步)
-    // nextTick不是创建一个异步任务，而是将这个任务维护到了队列中
-    // 没有直接使用某个api，采用优雅降级的方式
-    // 先采用promise（IE不兼容），MutationObserver(微任务，H5的api)，setImmediate(ie专属)，setTimeout
-    function nextTick(cb) {
-        callbacks.push(cb); // 维护nextTick的calback方法
-        if(!waiting) {
-            timerFunc();
-        }
-        waiting = true;
-    }
-
     function createElementVNode(vm, tag, data = {},...children) {  // h()  _c()
         if (data == null) data = {};
         let key = data.key;
@@ -527,13 +623,11 @@
     }
 
     function createTextVNode(vm, text) {  // _v()
-        debugger
         return vNode(vm,undefined, undefined, undefined, undefined, text)
     }
     // ast做的是语法层面的转化，他描述的是语法本身(描述语言本身，js，css，html)
     // 但是虚拟dom，描述的是dom元素，可以增加一些自定义属性
     function vNode(vm,tag,key,data,children,text) {
-        debugger
         return {
             vm,
             tag,
@@ -595,7 +689,6 @@
         };
         // _c('div',{}, ...children)
         Vue.prototype._c = function() {
-            debugger
             return createElementVNode(this, ...arguments)
         };
         // _v(text)

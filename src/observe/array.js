@@ -34,6 +34,7 @@ methods.forEach( method => {
         // 观测数组新增的每一项
         ob.observeArray(inserted)
       }
+      ob.dep.notifi();
     return result;
   }
 })

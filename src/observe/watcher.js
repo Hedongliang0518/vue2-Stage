@@ -1,4 +1,4 @@
-import Dep from "./dep";
+import Dep, { popTarget, pushTarget } from "./dep";
 
 let id = 0;
 
@@ -8,16 +8,22 @@ let id = 0;
 // 当我们创建渲染watcher的时候，我们会把当前的渲染watcher放到Dep.target上
 // 调用_render方法
 class Watcher {  // 不同组件有不同的watcher
-    constructor(vm, fn) {
+    constructor(vm, fn, options) {
         this.id = id++;
+
+        this.renderWatcher = options;  // 是同一个渲染watcher
 
         this.getter = fn; // 调用这个函数就会发生取值操作
 
         this.deps = []; // watcher记录dep；如组件卸载，清除所有的响应式数据，实现计算属性和清理工作
 
         this.depsId = new Set();
+        this.vm = vm;
+
+        this.lazy = options.lazy;
+        this.dirty = this.lazy;  // 缓存值（是否脏值）
         
-        this.get()
+        this.lazy ? undefined : this.get()
     }
 
     addDep(dep) {  // 一个组件对应多个属性，重复属性不用记录
@@ -29,22 +35,39 @@ class Watcher {  // 不同组件有不同的watcher
         }
     }
 
+    evaluate() {
+       this.value = this.get(); // 获取到用户函数的返回值，并且标识为脏值
+       this.dirty = false;
+    }
+
     get() {
-        Dep.target = this; // 静态属性，将组件挂载到dep全局上
-        this.getter(); // 触发_render方法，会去vm上取值，
-        Dep.target = null; // 渲染完毕后置空，避免vm.xxx取值也进行依赖收集
+        // Dep.target = this; // 静态属性，将组件挂载到dep全局上
+        pushTarget(this) // 静态属性，将组件挂载到dep全局上
+        let value = this.getter.call(this.vm); // 触发_render方法，会去vm上取值，
+        // Dep.target = null; // 渲染完毕后置空，避免vm.xxx取值也进行依赖收集
+        popTarget() // 渲染完毕后置空，避免vm.xxx取值也进行依赖收集
+        return value;
     }
 
     update() {
+        // 如果是计算属性 依赖的值发生变化，就标识计算属性是脏值
+        if(this.lazy) {
+            this.dirty = true
+        }
         queueWatcher(this); // 把当前的watcher暂存起来
+    }
+
+    depend() {
+        let i = this.deps.length;
+        while(i--) {
+            this.deps[i].depend(); // 让计算属性watcher收集渲染watcher
+        }
     }
     
     run() {
         console.log(("updata"));
         this.get()
-    }
-
-    
+    } 
 }
 
 let queue = [];

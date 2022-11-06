@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <script src="Vue.js"></script>
+</head>
+<body>
+  <div id="app" style="color:red">
+    {{funllName}}{{funllName}}{{funllName}}{{funllName}}{{funllName}}{{funllName}}{{funllName}}
+  </div>
+  <script>
+   const vm = new Vue({
+    el:"#app",
+    data: {
+      firstName: "h",
+      lastName: "dl"
+    },
+    // 计算属性就是一个difinePorperty
+    // 计算属性也是一个watcher  [渲染watcher，计算属性watcher]， dep进行收集
+    computed: {
+      funllName() {  // defineProperty  中的get方法
+        console.log("run");
+        
+        return this.firstName + this.lastName
+      }
+
+      // funllName: {
+      //   get() {
+      //     console.log("run");
+      //     return this.firstName + this.lastName
+      //   },
+      //   set(newVal) {
+      //     console.log(newVal);
+      //   }
+      // }
+    }
+    
+   })
+   setTimeout(()=> {
+      vm.firstName = "何东亮" 
+    }, 1000)
+  </script>
+</body>
+</html>

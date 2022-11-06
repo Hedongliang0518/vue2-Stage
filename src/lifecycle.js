@@ -54,7 +54,6 @@ export function initLifeCycle(Vue) {
     }
     // _c('div',{}, ...children)
     Vue.prototype._c = function() {
-        debugger
         return createElementVNode(this, ...arguments)
     }
     // _v(text)

@@ -2,6 +2,8 @@ import { newArrayProto } from './array'
 import Dep from "./dep"
 class Observer {
   constructor(data) {
+    // 给每个对象都增加收集功能
+    this.dep = new Dep()
     // 将Observer实例赋到data自定义属性上。在劫持数组方法时拿到observeArray进行观测;也给数据加了一个标识,如果数据有__ob__,则说明改数据被劫持过了。
     data.__ob__ = this;
     // 给对象添加__ob__属性后，循环的时候会再次循环__ob__，形成死循环；将__ob__变成不可枚举
@@ -33,13 +35,19 @@ class Observer {
 
 // 对数据做响应式处理  闭包
 export function defineReactive(target, key, value) {
-  observe(value) // 递归对所有对象都进行属性劫持
+  let childOb = observe(value) // 递归对所有对象都进行属性劫持 childOb.dep用来收集依赖
   let dep = new Dep(); // 给每个属性添加dep，做依赖收集
   Object.defineProperty(target,key, {
     get() {   // 用户取值走get方法
       // 页面渲染的时候会调用render函数，进行取值，依赖收集，没渲染的则不触发getter
       if(Dep.target) {
         dep.depend(); // 让这个属性的收集器记住当前的watcher
+        if(childOb) {
+          childOb.dep.depend(); // 让数组和对象本身也能实现依赖收集
+          if(Array.isArray(value)) {
+            dependArray(value)
+          }
+        }
       }
       return value;
     },
@@ -51,6 +59,17 @@ export function defineReactive(target, key, value) {
       dep.notifi(); // 通知更新
     }
   })
+}
+
+
+function dependArray(value) {
+  for(let i = 0; i < value.length; i++) {
+    let current = value[i];
+    current.__ob__ && current.__ob__.dep.depend();
+    if(Array.isArray(current)) {
+      dependArray(current)
+    }
+  }
 }
 
 export function observe(data) {

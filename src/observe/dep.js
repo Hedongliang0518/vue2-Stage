@@ -21,4 +21,15 @@ class Dep {
 }
 Dep.target = null;
 
+let stark = [];
+export function pushTarget(watcher) {
+    stark.push(watcher)
+    Dep.target = watcher
+}
+
+export function popTarget(watcher) {
+    stark.pop()
+    Dep.target = stark[stark.length - 1]
+}
+
 export default Dep;
