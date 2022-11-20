@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <script src="Vue.js"></script>
+</head>
+<body>
+  <div id="app" style="color:red">
+    {{firstName}}
+  </div>
+  <script>
+   const vm = new Vue({
+    el:"#app",
+    data: {
+      firstName: "h",
+      lastName: "dl"
+    },
+    // 底层调用$watch
+    watch:{
+      firstName(newVal, oldVal) {
+        console.log("newVal", newVal,oldVal);
+      }
+    }
+
+    // vm.$watch('firstName', (newVal,oldVal) => {
+    //   console.log("newVal", newVal);
+    // })
+    
+   })
+   setTimeout(()=> {
+      vm.firstName = "何东亮" 
+    }, 1000)
+  </script>
+</body>
+</html>

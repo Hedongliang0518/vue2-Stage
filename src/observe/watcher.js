@@ -1,4 +1,4 @@
-import Dep, { popTarget, pushTarget } from "./dep";
+import { popTarget, pushTarget } from "./dep";
 
 let id = 0;
 
@@ -8,22 +8,33 @@ let id = 0;
 // 当我们创建渲染watcher的时候，我们会把当前的渲染watcher放到Dep.target上
 // 调用_render方法
 class Watcher {  // 不同组件有不同的watcher
-    constructor(vm, fn, options) {
+    constructor(vm, exprOrFn, options, cb) {
         this.id = id++;
 
         this.renderWatcher = options;  // 是同一个渲染watcher
 
-        this.getter = fn; // 调用这个函数就会发生取值操作
+        if(typeof exprOrFn === 'string' ) {  // 如果是字符串转变成函数
+            this.getter = function() {
+                return vm[exprOrFn]
+            }
+        } else {
+            this.getter = exprOrFn; // 调用这个函数就会发生取值操作
+        }
+
+        this.user = options.user; // 标识是否是用户自己的watcher
+
 
         this.deps = []; // watcher记录dep；如组件卸载，清除所有的响应式数据，实现计算属性和清理工作
 
         this.depsId = new Set();
         this.vm = vm;
 
+        this.cb = cb;
+
         this.lazy = options.lazy;
         this.dirty = this.lazy;  // 缓存值（是否脏值）
         
-        this.lazy ? undefined : this.get()
+        this.value = this.lazy ? undefined : this.get() // 存储老值
     }
 
     addDep(dep) {  // 一个组件对应多个属性，重复属性不用记录
@@ -65,8 +76,11 @@ class Watcher {  // 不同组件有不同的watcher
     }
     
     run() {
-        console.log(("updata"));
-        this.get()
+        let oldVal = this.value;
+        let newVal = this.get()
+        if(this.user) {
+            this.cb(newVal, oldVal)
+        }
     } 
 }
 
